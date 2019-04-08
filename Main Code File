@@ -1,0 +1,781 @@
+from sr.robot import *
+import math as m
+import time
+R = Robot()
+
+#Origin day 2
+
+zone = R.zone
+proceed = True
+mode = "Not"
+state = "Find Token"
+trial = 1
+ultra = 7
+genSpeed = 50
+lostCount = 0
+suspendedState = ""
+currentCoords = []
+pinNumber = 3
+switch1 = 4
+switch2 = 5
+switch3 = 7
+switch4 = 6
+ninetyTurnTime = 1.45 # Time taken to do 90 degrees
+ninetyTurnPower = 50 # Power taken to do 90 degrees
+motorB1 = "SR0LBN" # Wheel motors
+motorB2 = "SR0TAJ" # Pulley and Claws
+#Initiatlise Ruggeduino pins
+R.ruggeduinos[0].pin_mode(pinNumber, INPUT_PULLUP)
+R.ruggeduinos[0].pin_mode(switch1, INPUT_PULLUP)
+R.ruggeduinos[0].pin_mode(switch2, INPUT_PULLUP)
+R.ruggeduinos[0].pin_mode(switch3, INPUT_PULLUP)
+R.ruggeduinos[0].pin_mode(switch4, INPUT_PULLUP)
+R.ruggeduinos[0].pin_mode(ultra, INPUT_PULLUP)
+
+def markerNumber(zone):
+    if zone == 0:
+        marker = 28
+    elif zone == 1:
+        marker = 29
+    elif zone == 2:
+        marker = 30
+    else:
+        marker = 31
+    
+    print("markerNumber has been executed")
+    return marker
+
+def sight():
+    """Returns the list of markers the robot can see"""
+    markers = R.see()
+    print("sight has been executed")
+    return markers
+
+def xSpacing(m1):
+    """Uses one marker to calculate coordinates"""
+    theta = 90 - m1.orientation.rot_y
+    theta = m.radians(theta)
+    #Making the distance 2D
+    distance = m1.dist * m.cos(m.radians(m1.centre.polar.rot_x))
+    #Distance from wall to robot
+    xDist = distance * m.sin(theta)
+    #Distance along the wall from the marker
+    yDist = distance * m.cos(theta)
+    print("xSpacing has been executed")
+    return xDist,yDist
+    
+def xSpacingTwo(m1,m2):
+    """Uses 2 markers to calculate coordinates"""
+    #Returns the left most marker followed by the other
+    m1,m2 = leftandright(m1,m2)
+    theta = m1.rot_y - m2.rot_y
+    theta = m.radians(theta)
+    #Distance from wall to robot
+    xDist = (m1.dist * m2.dist * m.sin(theta)) / 1
+    #Distance along the wall from the marker
+    yDist = m1.dist * m.sin(m1.rot_y)
+    print("xSpacingTwo has been executed")
+    return xDist,yDist
+    
+def leftandright(m1,m2):
+    """Returns the leftmost marker followed by the other"""
+    if m1.rot_y > m2.rot_y:
+        return m1,m2
+    else:
+        return m2,m1
+        
+def firstSight(markers):
+    """Decides whether to use one marker coordinates or 2"""
+    xCoord,yCoord = xSpacing(markers[0])
+    wall = wallNumber(markers[0])
+    print("firstSight")
+    return xCoord,yCoord,wall
+        
+def drive(times, power):
+    """Drives the motors forwards"""
+    R.motors[motorB1].m0.power = power
+    R.motors[motorB1].m1.power = power
+    time.sleep(times)
+    stop()
+    
+def turnLeft(times, power):
+    """Turns the robot anticlockwise"""
+    R.motors[motorB1].m0.power = -power
+    R.motors[motorB1].m1.power = power + 8
+    time.sleep(times)
+    stop()
+    
+def turnRight(times, power):
+    """Turns the robot clockwise"""
+    R.motors[motorB1].m0.power = power
+    R.motors[motorB1].m1.power = -power - 8
+    time.sleep(times)
+    stop()
+
+def stop():
+    """Stops the motors"""
+    R.motors[motorB1].m0.power = 0
+    R.motors[motorB1].m1.power = 0
+    
+def wallNumber(markers):
+    global zone
+    """Returns the number of the wall the marker is on"""
+    for m in markers:
+        number = m.info.code
+        if number in range(0,7):
+            return 1
+        if number in range(7,14):
+            return 2
+        if number in range(14,21):
+            return 3
+        if number in range(21,28):
+            return 4
+        if number in range(28,32):
+            if mode != "Test":
+                token = markerNumber(zone)
+                if number == token:
+                    return 5
+                else:
+                    return 0
+            else:
+                return 5
+        else:
+            return "code not working"
+            
+def distFrom(marker):
+    """Returns how far along the wall a marker is"""
+    print("Number 1")
+    number = marker.info.code
+    print("Number 2")
+    if number in [0,13,20,21]:
+        return 1
+    elif number in [1,12,19,22]:
+        return 2
+    elif number in [2,11,18,23]:
+        return 3
+    elif number in [3,10,17,24]:
+        return 4
+    elif number in [4,9,16,25]:
+        return 5
+    elif number in [5,8,15,26]:
+        return 6
+    elif number in [6,7,14,27]:
+        return 7
+    else:
+        return 0
+            
+def fullNinety(direction, yCoord, xCoord):
+    if direction > 250 and direction < 290:
+        if yCoord > 4:
+            turnLeft(ninetyTurnTime,ninetyTurnPower)
+        else:
+            turnRight(ninetyTurnTime,ninetyTurnPower)
+    elif direction > 170 and direction < 190:
+        if xCoord > 4:
+            turnLeft(ninetyTurnTime,ninetyTurnPower)
+        else:
+            turnRight(ninetyTurnTime,ninetyTurnPower)
+    elif direction > 70 and direction < 100:
+        if yCoord > 4:
+            turnRight(ninetyTurnTime,ninetyTurnPower)
+        else:
+            turnLeft(ninetyTurnTime,ninetyTurnPower)
+    elif direction > 350 or direction < 10:
+        if xCoord > 4:
+            turnRight(ninetyTurnTime,ninetyTurnPower)
+        else:
+            turnLeft(ninetyTurnTime,ninetyTurnPower)
+        
+def xFirstRight(direction, xCoord):
+    if direction < 88:
+        turnRight(0.1,40)
+        return False
+    elif direction > 92:
+        turnLeft(0.1,40)
+        return False
+    elif xCoord > 4.1 and xCoord < 3.9:
+        drive(0.1,40)
+        return False
+    else:
+        return True
+        
+def xFirstLeft(direction, xCoord):
+    if direction < 268:
+        turnRight(0.1,40)
+        return False
+    elif direction > 272:
+        turnLeft(0.1,40)
+        return False
+    elif xCoord > 4.1 and xCoord < 3.9:
+        drive(0.1,40)
+        return False
+    else:
+        return True
+
+def yFirstUp(direction, yCoord):
+    if direction > 2:
+        turnLeft(0.1,40)
+        return False
+    elif direction < 358:
+        turnRight(0.1,40)
+        return False
+    elif yCoord > 4.1 and yCoord < 3.9:
+        drive(0.1,40)
+        return False
+    else:
+        return True
+        
+def yFirstDown(direction, yCoord):
+    if direction > 182:
+        turnLeft(0.1,40)
+        return False
+    elif direction < 178:
+        turnRight(0.1,40)
+        return False
+    elif yCoord > 4.1 and yCoord < 3.9:
+        drive(0.1,40)
+        return False
+    else:
+        return True
+        
+def leftRight(direction):
+    if direction >= 0 and direction < 180:
+        return "Right"
+    elif direction >= 180 and direction < 360:
+        return "Left"
+
+def upDown(direction):
+    if direction >= 270 and direction <= 360 and direction >= 0 and direction < 90:
+        return "Up"
+    elif direction >= 90 and direction < 270:
+        return "Down"
+
+def arenaCoordinates(marker,xDist,yDist, wall):
+    """Returns the x and y coordinates as well as the direction the robot is facing"""
+    markerDist = distFrom(marker)
+    xCoord = 0
+    yCoord = 0
+    direction = 0
+    theta = 0
+    if wall == 1:
+        #If the marker is to the left of the robot
+        theta = abs(m.degrees(m.atan(xDist/yDist)))
+        if marker.rot_y > 0:
+            xCoord = markerDist - yDist
+            direction = 360 - abs(theta)
+        #If the marker is to the right of the robot
+        elif marker.rot_y < 0:
+            xCoord = markerDist + yDist
+            direction = abs(theta)
+        #If the marker is directly in front of the robot
+        else:
+            xCoord = markerDist
+            direction = 0
+        yCoord = 8 - xDist
+    elif wall == 2:
+        theta = abs(m.degrees(m.atan(yDist/xDist)))
+        if marker.rot_y > 0:
+            yCoord = markerDist + yDist
+            direction = 90 - abs(theta)
+        elif marker.rot_y < 0:
+            yCoord = markerDist - yDist
+            direction = 90 + abs(theta)
+        else:
+            xCoord = markerDist
+            direction = 90
+        xCoord = 8 - xDist
+    elif wall == 3:
+        theta = abs(m.degrees(m.atan(xDist/yDist)))
+        if marker.rot_y > 0:
+            xCoord = markerDist + yDist
+            direction = 180 - abs(theta)
+        elif marker.rot_y < 0:
+            xCoord = markerDist - yDist
+            direction = 180 + abs(theta)
+        else:
+            xCoord = markerDist
+            direction = 180
+        yCoord = xDist
+    else:
+        theta = abs(m.degrees(m.atan(yDist/xDist)))
+        if marker.rot_y > 0:
+            yCoord = markerDist - yDist
+            direction = 270 - abs(theta)
+        elif marker.rot_y < 0:
+            xCoord = markerDist + yDist
+            direction = 270 + abs(theta)
+        else:
+            yCoord = markerDist
+            direction = 270
+        xCoord = xDist
+    print("Theta is: " + str(theta))
+    return xCoord, yCoord, abs(direction), abs(theta)
+    
+def parallel(wall,direction):
+    if wall == 1:
+        if direction < 92 and direction > 88:
+            return True
+        else:
+            return False
+    elif wall == 2:
+        if direction < 2 and direction > 358:
+            return True
+        else:
+            return False
+    elif wall == 3:
+        if direction < 182 and direction > 178:
+            return True
+        else:
+            return False
+    else:
+        if direction < 272 and direction > 268:
+            return True
+        else:
+            return False
+            
+        
+#functions#
+def bestTurn(oldbearing,newbearing):
+    turn_op1=newbearing-oldbearing
+    turn_op2=360-abs(turn_op1) #will always be positive
+    
+    if turn_op1>0: #if the first turn option is positive the second one will also be positive, so
+        turn_op2*=-1 #we want it to be negative
+
+    elif abs(turn_op1)<abs(turn_op2):
+        turn = turn_op1
+        if turn < 0:
+            return "CounterClockwise"
+        else:
+            return "Clockwise" 
+    else:
+        turn = turn_op2
+        if turn < 0:
+            return "CounterClockwise"
+        else:
+            return "Clockwise"
+    return "Clockwise"        
+    
+ 
+def perpendicular(wall,direction):
+    '''Works out if the robot is perpendicular to a wall'''
+    if wall == 1:
+        if direction < 2 and direction > 358:
+            return True
+        else:
+            return False
+    elif wall == 2:
+        if direction < 92 and direction > 88:
+            return True
+        else:
+            return False
+    elif wall == 3:
+        if direction < 182 and direction > 178:
+            return True
+        else:
+            return False
+    elif wall == 4:
+        if direction < 272 and direction > 268:
+            return True
+        else:
+            return False
+            
+    
+def grab():
+    R.motors[motorB2].m1.power = 40
+    time.sleep(0.4)
+    R.motors[motorB2].m1.power = 0
+    
+def liftUp():
+    R.motors[motorB2].m0.power = 40
+    time.sleep(3.8)
+    R.motors[motorB2].m0.power = 0
+    
+def liftDown():
+    R.motors[motorB2].m0.power = -40
+    time.sleep(2.5)
+    R.motors[motorB2].m0.power = 0
+    
+def drop():
+    R.motors[motorB2].m1.power = -40
+    time.sleep(0.4)
+    R.motors[motorB2].m1.power = 0
+    
+def grabFord():
+    while R.ruggeduinos[0].digital_read(pinNumber) == True:
+        R.motors[motorB1].m0.power = 30
+        R.motors[motorB1].m1.power = 30
+    stop()
+    
+def tokenAdj():
+    R.motors[motorB2].m1.power = -40
+    time.sleep(0.2)
+    R.motors[motorB2].m1.power = 0
+    time.sleep(0.1)
+    R.motors[motorB2].m1.power = 40
+    time.sleep(0.4)
+    R.motors[motorB2].m1.power = 0
+        
+def grabTwo():
+    while R.ruggeduinos[0].digital_read(switch1) == True and R.ruggeduinos[0].digital_read(switch2) == True:
+        R.motors[motorB2].m1.power = 40
+    time.sleep(0.1)
+    R.motors[motorB2].m1.power = 0
+    
+def edging():
+    while R.ruggeduinos[0].digital_read(ultra) == False:
+        R.motors[motorB1].m0.power = 30
+        R.motors[motorB1].m1.power = 30
+    stop()
+    
+def turnAngleLeft(angle,power):
+    times = (ninetyTurnTime / 90) * angle
+    R.motors[motorB1].m0.power = -power
+    R.motors[motorB1].m1.power = power + 7
+    time.sleep(times)
+    print("TurnAngleLeft called")
+    stop()
+    
+def turnAngleRight(angle,power):
+    times = (ninetyTurnTime / 90) * angle
+    R.motors[motorB1].m0.power = power
+    R.motors[motorB1].m1.power = -power - 8
+    time.sleep(times)
+    print("TurnAngleRight called")
+    stop()
+    
+def angles(direction, wall):
+    angleToTurn = 0
+    if wall == 1:
+        angleToTurn = 90 - direction
+    elif wall == 2:
+        angleToTurn = 90 - direction
+    elif wall == 3:
+        angleToTurn = 90 - direction
+    else:
+        angleToTurn = 90 - direction
+    print("Angle to turn is: " + str(angleToTurn))
+    return angleToTurn
+    
+def newDrive(times,power):
+    R.motors[motorB1].m0.power = power
+    R.motors[motorB1].m1.power = power + 8
+    time.sleep(times)
+    stop()
+    
+def newDriveRev(times,power):
+    R.motors[motorB1].m0.power = power
+    R.motors[motorB1].m1.power = power - 8
+    time.sleep(times)
+    stop()
+    
+def wallAssociate(zone, markers):
+    blank = []
+    correct = []
+    temp = []
+    print("Wall Associate")
+    for m in markers:
+        temp = blank
+        temp.append(m)
+        number = wallNumber(temp)
+        if zone == 0 and number == 1:
+            correct.append(m)
+            return correct
+        elif zone == 1 and number == 2:
+            correct.append(m)
+            return correct
+        elif zone == 2 and number == 3:
+            correct.append(m)
+            return correct
+        else:
+            correct.append(m)
+            return correct
+    return blank
+        
+    
+#pin 12 high = something in front
+#Main Program
+tokens = markerNumber(zone)
+currentTime = time.time()
+while proceed == True:
+    try:
+        if time.time() - currentTime > 130:
+            liftDown()
+            drop()
+            drive(1,-genSpeed)
+            proceed = False
+            state = "Finish"
+        if state == "Start":
+            markers = sight() #checks for markers, returns list
+            if len(markers) != 0:
+                #First sight
+                markers = sight()
+                tokenMarker = []
+                for i in markers:
+                    temp = []
+                    temp.append(i)
+                    if wallNumber(temp) != 5: #wall number 5 means the marker is a token, so we are checking if marker is not a token i.e. on a wall
+                        tokenMarker.append(i)
+                        markers = tokenMarker #wall marker list replaces original list, filtering out tokens (we don't want to try and find the coordinates of a token as
+                #they could be anywhere
+                if len(markers) == 0:
+                    print("Only Tokens seen")
+                else:
+                    xDist,yDist,wall = firstSight(markers)
+                    xCoord,yCoord,direction, theta = arenaCoordinates(markers[0],xDist,yDist,wall)
+                    currentCoords = [xCoord,yCoord,direction]
+                    print("The X coord  is: " + str(xCoord) + " , the Y coord is: " + str(yCoord) + " and the direction is " + str(direction))
+                    time.sleep(3)
+            else:
+                turnLeft(0.1, 40) #Tries to find a marker by turning left
+                print("Nothing Seen")
+        elif state == "Find Token":
+            time.sleep(1)
+            markers = sight()
+            if len(markers) == 0:
+                turnRight(0.5, 40)
+                print("Nothing seen")
+            else:
+                token = False
+                for q in markers:
+                    temp = []
+                    temp.append(q)
+                    if wallNumber(temp) == 5:
+                        token = True
+                        print("Token Found")
+                        state = "Face Token"
+                if token == False:
+                    turnRight(0.5, 40)
+        elif state == "Face Token":
+            markers = sight()
+            tokenMarker = []
+            for p in markers:
+                temp = []
+                temp.append(p)
+                if wallNumber(temp) == 5:
+                    tokenMarker = temp
+            if len(tokenMarker) == 0:
+                lostCount += 1
+                if lostCount >= 5:
+                    state = "Find Token"
+                    print("Lost Token")
+            elif tokenMarker[0].dist > 0.8:
+                print("Long move forward")
+                lostCount = 0
+                drive(1,40)
+            elif tokenMarker[0].rot_y >= 2:
+                print("Turning Right")
+                lostCount = 0
+                turnRight(0.1, 40)
+            elif tokenMarker[0].rot_y <= -2:
+                print("Turning Left")
+                lostCount = 0
+                turnLeft(0.1, 40)
+            elif tokenMarker[0].dist >= 0.3:
+                print("Moving forward")
+                lostCount = 0
+                drive(0.1, 40)
+            else:
+                print("In line")
+                lostCount = 0
+                state = "Grab Token"
+        elif state == "Grab Token":
+            #Arms down and start moving
+            liftDown()
+            grabFord()
+            grab()
+            liftUp()
+            tokenAdj()
+            driveTime = 0
+            if trial == 1:
+                driveTime = 1
+                print("Trial 1")
+            elif trial == 2:
+                driveTime = 1.4
+                print("Trial 2")
+            elif trial == 3:
+                driveTime = 1.8
+                print("Trial 3")
+            elif trial == 4:
+                driveTime = 2.2
+                print("Trial 4")
+            else:
+                driveTime = 2.6
+                print("Trial 5")
+            turnLeft((ninetyTurnTime*0.9), ninetyTurnPower)
+            newDrive(11, 40)
+            state = "Centre Move"
+        elif state == "Centre Move":
+            #main code#
+            count = 0
+            corner = zone
+            markers = sight()
+            print("Length of marker list = " + str(len(markers)))
+            if len(markers) == 0:
+                newDriveRev(0.3,-50)
+                turnLeft(1,50)
+                print("No markers seen")
+                time.sleep(1) #ok
+            else:
+                for i in markers:
+                    temp = []
+                    temp.append(i)
+                    if wallNumber(temp) != 5 or wallNumber(temp) != 0:
+                        tempList = []
+                        tempList.append(i)
+                        markers = tempList
+                        count += 1
+                        print("Marker found, tokens removed")
+                        break
+                for j in markers:
+                    print("Markers seen: " + str(j.info.code))
+                markers = wallAssociate(corner,markers)
+                if len(markers) == 0 and count == 0:
+                    newDriveRev(0.3,-50)
+                    turnLeft(1,50)
+                    print("No markers seen")
+                    time.sleep(1)
+                else:
+                    for k in markers:
+                        print("Markers seen 2: " + str(k.info.code))
+                    xDist,yDist,wall = firstSight(markers)
+                    print("FirstSight done")
+                    done = False
+                    markers = markers[0]
+                    xstart,ystart,direction,theta = arenaCoordinates(markers,xDist,yDist,wall)
+                    print("X coord = " + str(xstart) + ", Y coord = " + str(ystart) + ", Direction = " + str(direction))
+                    if corner == 0:
+                        if xstart < 4.9 and xstart > 3.1:
+                            angleToTurn = angles(theta,wall)
+                            turnAngleRight(angleToTurn, genSpeed)
+                            done = True
+                        else:
+                            angleToTurn = angles(theta,wall)
+                            turnAngleRight(angleToTurn, genSpeed)
+                            print("Corner = 0")
+                            newDrive(1,50)
+                    elif corner == 1:
+                        if ystart < 4.9 and ystart > 3.1:
+                            angleToTurn = angles(theta,wall)
+                            turnAngleRight(angleToTurn, genSpeed)
+                            done = True
+                        else:
+                            angleToTurn = angles(theta,wall)
+                            turnAngleRight(angleToTurn, genSpeed)
+                            print("Corner = 1")
+                            newDrive(1,50)
+                    elif corner == 2:
+                        if xstart < 4.9 and xstart > 3.1:
+                            angleToTurn = angles(theta,wall)
+                            turnAngleRight(angleToTurn, genSpeed)
+                            done = True
+                        else:
+                            angleToTurn = angles(theta,wall)
+                            turnAngleRight(angleToTurn, genSpeed)
+                            print("Corner = 2")
+                            newDrive(1,50)
+                    else:
+                        if ystart < 4.9 and ystart > 3.1:
+                            angleToTurn = angles(theta,wall)
+                            turnAngleRight(angleToTurn, genSpeed)
+                            done = True
+                        else:
+                            angleToTurn = angles(theta,wall)
+                            turnAngleRight(angleToTurn, genSpeed)
+                            print("Corner = 3")
+                            newDrive(1,50)
+                    if done == True:
+                        print("Moved to done = true")
+                        time.sleep(0.5)
+                        turnRight(ninetyTurnTime,ninetyTurnPower)
+                        newDrive(4,100)
+                        time.sleep(0.5)
+                        edging()
+                        liftDown()
+                        drop()
+                        newDriveRev(1,-50)
+                        liftUp()
+                        newDriveRev(4,-50)
+                        turnRight(ninetyTurnTime,ninetyTurnPower)
+                        newDrive(10,genSpeed)
+                        turnLeft(ninetyTurnTime,ninetyTurnPower)
+                        state = "Find Token"
+        elif state == "Drop Token":
+            drive(5,60)
+            edging()
+            liftDown()
+            drop()
+            drive(3,-genSpeed)
+            turnRight(ninetyTurnTime,ninetyTurnPower)
+            drive(5,genSpeed)
+            turnLeft(ninetyTurnTime,ninetyTurnPower)
+            trial += 1
+            state = "Find Token"
+        elif state == "Emergency":
+            turnLeft(2,50)
+            turnRight(2,50)
+            #First sight
+            markers = sight() #check for markers
+            if len(markers) != 0:
+                tokenMarker = [] #empty list
+                for i in range (len(markers)):
+                    if wallNumber(markers[i]) != 5: 
+                        tokenMarker.append(markers[i])
+                markers = tokenMarker 
+                if len(markers) == 0:
+                    print("Only Tokens seen")
+                else:
+                    xDist,yDist,wall = firstSight(markers)
+                    xCoord,yCoord,direction,theta = arenaCoordinates(markers[0],xDist,yDist,wall)
+                    currentCoords = [xCoord,yCoord,direction]
+                    print("The X coord  is: " + str(xCoord) + " , the Y coord is: " + str(yCoord) + " and the direction is " + str(direction))
+                    state = suspendedState
+                    time.sleep(3)
+            else:
+                print("Nothing Seen")            
+        elif state == "Show":
+            print(zone)
+            drive(2,genSpeed)
+            liftDown()
+            drop()
+            state = "Finished"
+        else:
+            print("Finished")
+    except Exception,e:
+        print(e)
+        drive(0.5,genSpeed)
+        drive(0.5,-genSpeed)
+        liftDown()
+        drop()
+        drive(1,-genSpeed)
+print("Finished")
+
+# Redundant move state
+#    elif state == "Move":
+#        markers = sight()
+#        if len(markers) == 0:
+#            print("Nothing seen")
+#            turnLeft(0.1, 40) #Tries to find a marker by turning left
+#        else:
+#            xDist,yDist,wall = firstSight(markers)
+#            xCoord,yCoord,direction = arenaCoordinates(markers[0],xDist,yDist,wall)
+#            currentCoords = [xCoord,yCoord,direction]
+#            print("The X coord  is: " + str(xCoord) + " , the Y coord is: " + str(yCoord) + " and the direction is " + str(direction))
+#            instructions()
+#        drive(0.5, 40)
+#        time.sleep(1)
+        
+#Old "Centre Move" code:
+        #markers = sight()
+        #if len(markers) == 0:
+        #    print("Nothing seen")
+        #else:
+        #    xDist,yDist,wall = firstSight(markers)
+        #    xCoord,yCoord,direction = arenaCoordinates(markers[0],xDist,yDist,wall)
+        #    while parallel(wall,direction) == False:
+        #        turnLeft(0.1, 40)
+        #    stop()
+#    else:
+        #xCoord,yCoord = xSpacingTwo(markers[0],markers[1])
+        #wall = wallNumber(markers[0])
+        #return xCoord,yCoord,wall
